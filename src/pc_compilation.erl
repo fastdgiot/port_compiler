@@ -39,37 +39,41 @@
                        Specs :: [pc_port_specs:spec()]) -> ok.
 compile_and_link(State, Specs) ->
     %% Compile each of the sources
-    NewBins = compile_sources(State, Specs),
-
-    %% Make sure that the target directories exist
-    lists:foreach(fun(Spec) ->
-                          Target = pc_port_specs:target(Spec),
-                          ok = filelib:ensure_dir(filename:join(rebar_state:dir(State), Target))
-                  end, Specs),
-
-    %% Only relink if necessary, given the Target
-    %% and list of new binaries
-    lists:foreach(
-      fun(Spec) ->
-              Target  = pc_port_specs:target(Spec),
-              Bins    = pc_port_specs:objects(Spec),
-              AllBins = [sets:from_list(Bins),
-                         sets:from_list(NewBins)],
-              Intersection = sets:intersection(AllBins),
-              case needs_link(Target, sets:to_list(Intersection)) of
-                  true ->
-                      LinkLang = pc_port_specs:link_lang(Spec),
-                      LinkTemplate = select_link_template(LinkLang, Target),
-                      Env = pc_port_specs:create_env(State, Spec),
-                      Cmd = expand_command(LinkTemplate, Env,
-                                           pc_util:strjoin(Bins, " "),
-                                           Target),
-                      rebar_api:info("Linking ~s", [Target]),
-                      rebar_utils:sh(Cmd, [{env, Env}, {cd, rebar_state:dir(State)}]);
-                  false ->
-                      ok
-              end
-      end, Specs).
+    case os:type() of
+        {win32, _} ->
+%%            io:format("Specs ~p",[Specs]),
+            ok;
+        _ ->
+            NewBins = compile_sources(State, Specs),
+            %% Make sure that the target directories exist
+            lists:foreach(fun(Spec) ->
+                Target = pc_port_specs:target(Spec),
+                ok = filelib:ensure_dir(filename:join(rebar_state:dir(State), Target))
+                          end, Specs),
+            %% Only relink if necessary, given the Target
+            %% and list of new binaries
+            lists:foreach(
+                fun(Spec) ->
+                    Target = pc_port_specs:target(Spec),
+                    Bins = pc_port_specs:objects(Spec),
+                    AllBins = [sets:from_list(Bins),
+                        sets:from_list(NewBins)],
+                    Intersection = sets:intersection(AllBins),
+                    case needs_link(Target, sets:to_list(Intersection)) of
+                        true ->
+                            LinkLang = pc_port_specs:link_lang(Spec),
+                            LinkTemplate = select_link_template(LinkLang, Target),
+                            Env = pc_port_specs:create_env(State, Spec),
+                            Cmd = expand_command(LinkTemplate, Env,
+                                pc_util:strjoin(Bins, " "),
+                                Target),
+                            rebar_api:info("Linking ~s", [Target]),
+                            rebar_utils:sh(Cmd, [{env, Env}, {cd, rebar_state:dir(State)}]);
+                        false ->
+                            ok
+                    end
+                end, Specs)
+    end.
 
 clean(_State, Specs) ->
     lists:foreach(fun(Spec) ->
